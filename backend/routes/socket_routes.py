@@ -128,12 +128,42 @@ def register_socket_events():
 
     @socketio.on('reject-call')
     def handle_reject_call(data):
+        caller_user_id = data.get('to')
+        if caller_user_id in online_users:
+            caller_socket_id = online_users[caller_user_id].get('socket_id')
+            print(f"Call rejected by {request.sid} to {caller_user_id}")
+            emit('call-rejected', {}, room=caller_socket_id)
+
+    @socketio.on('toggle-mic')
+    def handle_toggle_mic(data):
         target_user_id = data.get('to')
         if target_user_id in online_users:
             target_socket_id = online_users[target_user_id].get('socket_id')
-            print(f"Call rejected by {request.sid}, notifying {target_user_id}")
-            emit('call-rejected', {}, room=target_socket_id)
+            
+            sender_id = None
+            for uid, udata in online_users.items():
+                if udata['socket_id'] == request.sid:
+                    sender_id = uid
+                    break
+            
+            emit('mic-toggled', {
+                "from": sender_id,
+                "isMicOn": data.get('isMicOn')
+            }, room=target_socket_id)
 
-
-
-  
+    @socketio.on('toggle-video')
+    def handle_toggle_video(data):
+        target_user_id = data.get('to')
+        if target_user_id in online_users:
+            target_socket_id = online_users[target_user_id].get('socket_id')
+            
+            sender_id = None
+            for uid, udata in online_users.items():
+                if udata['socket_id'] == request.sid:
+                    sender_id = uid
+                    break
+            
+            emit('video-toggled', {
+                "from": sender_id,
+                "isVideoOn": data.get('isVideoOn')
+            }, room=target_socket_id)

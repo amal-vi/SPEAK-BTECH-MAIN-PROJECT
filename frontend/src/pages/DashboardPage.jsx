@@ -66,7 +66,7 @@ export default function DashboardPage() {
 
           <div className="lg:col-span-2 bg-white shadow-xl rounded-lg p-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Online</h2>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-96 overflow-y-auto">
               {isUsersLoading ? (
                 <p>Loading online users...</p>
               ) : onlineUsersList.length > 0 ? (
@@ -102,8 +102,7 @@ export default function DashboardPage() {
 
           <div className="lg:col-span-1 bg-white shadow-xl rounded-lg p-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Recent Calls</h2>
-            <div className="space-y-4">
-
+            <div className="space-y-4 max-h-96 overflow-y-auto">
               {isCallsLoading ? (
                 <p>Loading recent calls...</p>
               ) : recentCalls.length > 0 ? (
@@ -126,7 +125,6 @@ export default function DashboardPage() {
                           'Date unavailable'
                         )}
                       </p>
-                      {console.log(call)}
                     </div>
                   </div>
                 ))

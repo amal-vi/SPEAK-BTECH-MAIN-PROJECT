@@ -4,6 +4,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import Navbar from '../components/Navbar';
 import { clearIncomingCall } from '../store/users-slice/usersSlice';
+import {
+  IoMicOffSharp,
+  IoMicSharp,
+  IoVideocamOffSharp,
+  IoVideocamSharp,
+  IoCall
+} from "react-icons/io5";
 
 const peerConnectionConfig = {
   iceServers: [
@@ -22,23 +29,25 @@ export default function CallPage() {
 
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
-  const [otherUser, setOtherUser] = useState(null);
+
   const [callStatus, setCallStatus] = useState('idle');
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isVideoOn, setIsVideoOn] = useState(true);
+  const [remoteMicOn, setRemoteMicOn] = useState(true);
+  const [remoteVideoOn, setRemoteVideoOn] = useState(true);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
+  const otherUserRef = useRef(null);
 
   const createPeerConnection = (targetUserId) => {
     const pc = new RTCPeerConnection(peerConnectionConfig);
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('ice-candidate', {
-          to: targetUserId,
-          candidate: event.candidate,
-        });
+        socket.emit('ice-candidate', { to: targetUserId, candidate: event.candidate });
       }
     };
 
@@ -59,7 +68,6 @@ export default function CallPage() {
     return pc;
   };
 
-  // --- Get user media (camera/mic) ---
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
@@ -74,29 +82,29 @@ export default function CallPage() {
       });
   }, []);
 
-  // --- Hang up / End Call ---
   const handleHangUp = useCallback((notifyPeer = true) => {
-    console.log('Hanging up call, stream is:', localStreamRef.current);
+    console.log('Hanging up call...');
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
+      console.log('Local tracks stopped.');
     }
 
     peerConnectionRef.current?.close();
+
     setLocalStream(null);
     localStreamRef.current = null;
     setRemoteStream(null);
     setCallStatus('idle');
 
-    if (notifyPeer && otherUser) {
-      socket.emit('call-ended', { to: otherUser });
+    if (notifyPeer && otherUserRef.current) {
+      socket.emit('call-ended', { to: otherUserRef.current });
     }
 
     dispatch(clearIncomingCall());
     navigate('/dashboard');
-  }, [otherUser, dispatch, navigate, socket]);
+  }, [dispatch, navigate, socket]);
 
-  // --- Socket listeners ---
   useEffect(() => {
     const onCallAccepted = ({ answer }) => {
       console.log('Call accepted');
@@ -112,41 +120,42 @@ export default function CallPage() {
       }
     };
 
-    const onCallEnded = () => {
-      handleHangUp(false);
-    };
-
-    //  handle call rejection
+    const onCallEnded = () => handleHangUp(false);
     const onCallRejected = () => {
       console.log("Call rejected by peer");
       alert("Call was rejected.");
       handleHangUp(false);
     };
 
+    const onMicToggled = ({ isMicOn }) => setRemoteMicOn(isMicOn);
+    const onVideoToggled = ({ isVideoOn }) => setRemoteVideoOn(isVideoOn);
+
     socket.on('call-accepted', onCallAccepted);
     socket.on('ice-candidate', onIceCandidate);
     socket.on('call-ended', onCallEnded);
     socket.on('call-rejected', onCallRejected);
+    socket.on('mic-toggled', onMicToggled);
+    socket.on('video-toggled', onVideoToggled);
 
     return () => {
       socket.off('call-accepted', onCallAccepted);
       socket.off('ice-candidate', onIceCandidate);
       socket.off('call-ended', onCallEnded);
       socket.off('call-rejected', onCallRejected);
+      socket.off('mic-toggled', onMicToggled);
+      socket.off('video-toggled', onVideoToggled);
     };
   }, [socket, handleHangUp]);
 
-  // --- Handle outgoing / incoming call ---
   useEffect(() => {
     if (!localStream || !socket.connected || !user) {
       return;
     }
 
-    // Callee: answering an incoming call
     if (incomingCallData) {
       setCallStatus('in-call');
       const caller = incomingCallData.from;
-      setOtherUser(caller.user_id);
+      otherUserRef.current = caller.user_id;
 
       const pc = createPeerConnection(caller.user_id);
 
@@ -159,12 +168,10 @@ export default function CallPage() {
             answer: answer,
           });
         });
-
       dispatch(clearIncomingCall());
 
-      // Caller: starting a call
     } else if (calleeId && callStatus === 'idle') {
-      setOtherUser(calleeId);
+      otherUserRef.current = calleeId;
       setCallStatus('calling');
 
       const pc = createPeerConnection(calleeId);
@@ -172,52 +179,125 @@ export default function CallPage() {
       pc.createOffer()
         .then(offer => {
           pc.setLocalDescription(offer);
-          console.log('Making call to:', calleeId);
           socket.emit('call-user', {
             to: calleeId,
             offer: offer,
           });
         });
     }
-
   }, [calleeId, localStream, socket, callStatus, incomingCallData, user, dispatch]);
 
-  // --- UI ---
+  const toggleMic = useCallback(() => {
+    if (!localStreamRef.current) return;
+
+    const audioTrack = localStreamRef.current.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      const newMicState = audioTrack.enabled;
+      setIsMicOn(newMicState);
+
+      if (otherUserRef.current) {
+        socket.emit('toggle-mic', { to: otherUserRef.current, isMicOn: newMicState });
+      }
+    }
+  }, []);
+
+  const toggleVideo = useCallback(() => {
+    if (!localStreamRef.current) return;
+
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled;
+      const newVideoState = videoTrack.enabled;
+      setIsVideoOn(newVideoState);
+
+      if (otherUserRef.current) {
+        socket.emit('toggle-video', { to: otherUserRef.current, isVideoOn: newVideoState });
+      }
+    }
+  }, []);
+
+
   return (
     <div className="min-h-screen bg-black flex flex-col">
       <Navbar />
+      <div className="flex-grow flex items-center justify-center p-2 md:p-4">
 
-      {/* Video Feeds */}
-      <div className="flex-grow relative">
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          className="w-full h-full object-cover"
-        />
-        <video
-          ref={localVideoRef}
-          autoPlay
-          playsInline
-          muted
-          className="absolute bottom-24 right-4 w-1/4 max-w-xs border-4 border-white rounded-md"
-        />
-        {callStatus === 'calling' && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-2xl bg-black bg-opacity-50 p-4 rounded-md">
-            Calling...
+        <div className="relative w-full max-w-6xl aspect-video bg-black rounded-lg overflow-hidden">
+
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="w-full h-full object-cover"
+          />
+          {!remoteVideoOn && (
+            <div className="absolute top-0 left-0 w-full h-full bg-black flex items-center justify-center">
+              <div className="text-center text-white">
+                <IoVideocamOffSharp size={64} className="mx-auto" />
+                <p className="text-xl mt-4">Video is off</p>
+              </div>
+            </div>
+          )}
+
+          {remoteVideoOn && !remoteMicOn && (
+            <div className="absolute top-4 left-4 bg-black bg-opacity-50 p-2 rounded-full">
+              <IoMicOffSharp size={24} className="text-white" />
+            </div>
+          )}
+
+          <div
+            className="absolute top-4 right-4 w-32 md:w-48 aspect-[4/3]
+                       bg-black border-2 border-white rounded-md overflow-hidden"
+          >
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+            {!isVideoOn && (
+              <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-50 flex items-center justify-center">
+                <IoVideocamOffSharp size={48} className="text-white" />
+              </div>
+            )}
           </div>
-        )}
+
+          {callStatus === 'calling' && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-2xl bg-black bg-opacity-50 p-4 rounded-md">
+              Calling...
+            </div>
+          )}
+
+          <div
+            className="absolute bottom-0 left-0 w-full 
+                       bg-gray-800 bg-opacity-70 p-4 flex justify-center 
+                       space-x-4 md:space-x-6"
+          >
+            <button
+              onClick={toggleMic}
+              className={`p-4 rounded-full text-white ${isMicOn ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600'}`}
+            >
+              {isMicOn ? <IoMicSharp size={24} /> : <IoMicOffSharp size={24} />}
+            </button>
+            <button
+              onClick={toggleVideo}
+              className={`p-4 rounded-full text-white ${isVideoOn ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600'}`}
+            >
+              {isVideoOn ? <IoVideocamSharp size={24} /> : <IoVideocamOffSharp size={24} />}
+            </button>
+            <button
+              onClick={() => handleHangUp(true)}
+              className="p-4 bg-red-600 text-white rounded-full"
+            >
+              <IoCall size={24} style={{ transform: 'rotate(135deg)' }} />
+            </button>
+          </div>
+
+        </div>
       </div>
 
-      {/* Controls */}
-      <div className="bg-gray-800 p-4 flex justify-center space-x-6">
-        <button
-          onClick={() => handleHangUp(true)}
-          className="px-6 py-3 bg-red-600 text-white rounded-full text-lg"
-        >
-          Hang Up
-        </button>
-      </div>
     </div>
   );
 }

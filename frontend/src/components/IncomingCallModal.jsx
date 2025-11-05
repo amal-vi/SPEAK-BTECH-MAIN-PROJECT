@@ -17,7 +17,7 @@ export default function IncomingCallModal({ callData }) {
   };
 
   const handleReject = () => {
-    socket.emit('call-ended', { to: from.user_id });
+    socket.emit('reject-call', { to: from.user_id });
     dispatch(clearIncomingCall());
   };
 
