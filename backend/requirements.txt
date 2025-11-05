@@ -7,3 +7,4 @@ PyJWT
 python-dotenv
 dnspython
 cloudinary
+eventlet

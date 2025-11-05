@@ -1,13 +1,10 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask_socketio import SocketIO
 from config import Config
-from extensions import mongo, bcrypt
+from extensions import mongo, bcrypt, socketio
 import pymongo 
 import sys 
 import cloudinary
-
-socketio = SocketIO()
 
 def create_app():
     """Application factory function"""
@@ -50,20 +47,15 @@ def create_app():
         supports_credentials=True
     )
 
+    #Routes 
     from routes.auth_routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
 
     from routes.api_routes import api_bp
     app.register_blueprint(api_bp, url_prefix='/api')
-    
-    
-    @socketio.on('connect')
-    def handle_connect():
-        print('Client connected')
 
-    @socketio.on('disconnect')
-    def handle_disconnect():
-        print('Client disconnected')
+    from routes.socket_routes import register_socket_events
+    register_socket_events()
 
     @app.route('/api/test')
     def test_route():
