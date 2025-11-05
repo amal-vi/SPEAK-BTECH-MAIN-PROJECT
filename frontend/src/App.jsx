@@ -8,20 +8,26 @@ import RegisterPage from './pages/RegisterPage';
 import { ToastContainer } from 'react-toastify';
 import ProfilePage from './pages/ProfilePage';
 import DashboardPage from './pages/DashboardPage';
+import { SocketProvider } from './context/SocketContext';
+import CallPage from './pages/CallPage';
 
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-900 text-white">
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-        </Routes>
-      </div>
+      <SocketProvider>
+        <div className="min-h-screen bg-gray-900 text-white">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/call/:calleeId" element={<CallPage />} />
+            <Route path="/call" element={<CallPage />} />
+          </Routes>
+        </div>
+      </SocketProvider>
       <ToastContainer />
 
     </BrowserRouter>

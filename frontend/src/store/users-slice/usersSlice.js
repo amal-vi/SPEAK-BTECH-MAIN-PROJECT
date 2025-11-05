@@ -3,6 +3,7 @@ import { createSlice } from "@reduxjs/toolkit";
 const initialState = {
   onlineUsersList: [],
   isLoading: true,
+  incomingCallData: null,
 };
 
 export const usersSlice = createSlice({
@@ -16,8 +17,19 @@ export const usersSlice = createSlice({
     startLoadingOnlineUsers: (state) => {
       state.isLoading = true;
     },
+    setIncomingCall: (state, action) => {
+      state.incomingCallData = action.payload;
+    },
+    clearIncomingCall: (state) => {
+      state.incomingCallData = null;
+    },
   },
 });
 
-export const { setOnlineUsers, startLoadingOnlineUsers } = usersSlice.actions;
+export const {
+  setOnlineUsers,
+  startLoadingOnlineUsers,
+  setIncomingCall,
+  clearIncomingCall,
+} = usersSlice.actions;
 export default usersSlice.reducer;

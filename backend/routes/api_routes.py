@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 from extensions import mongo
 from utils.token_required import token_required
 from bson.objectid import ObjectId
+from bson.objectid import ObjectId
 import jwt
 import datetime
 import cloudinary.uploader 
@@ -56,3 +57,78 @@ def update_profile(current_user):
     except Exception as e:
         print(e) 
         return jsonify({'message': 'An error occurred', 'error': str(e)}), 500
+    
+@api_bp.route('/calls/recent', methods=['GET'])
+@token_required
+def get_recent_calls(current_user):
+    try:
+        user_id = current_user['user_id']
+        user_obj_id = ObjectId(user_id) 
+
+        pipeline = [
+            {
+                '$match': {
+                    '$or': [
+                        {'caller_id': user_obj_id},
+                        {'callee_id': user_obj_id}
+                    ]
+                }
+            },
+            {
+                '$sort': {'timestamp': -1}
+            },
+            {
+                '$limit': 10
+            },
+            {
+                '$addFields': {
+                    'other_user_id': {
+                        '$cond': {
+                            'if': {'$eq': ['$caller_id', user_obj_id]}, 
+                            'then': '$callee_id',                       
+                            'else': '$caller_id'                        
+                        }
+                    }
+                }
+            },    
+            {
+                '$lookup': {
+                    'from': 'users',
+                    'localField': 'other_user_id',
+                    'foreignField': '_id',
+                    'as': 'other_user_info'
+                }
+            },
+            {
+                '$unwind': {
+                    'path': '$other_user_info',
+                    'preserveNullAndEmptyArrays': True 
+                }
+            },
+            {
+                '$project': {
+                    '_id': 0,
+                    'call_id': {'$toString': '$_id'},
+                    'timestamp': { 
+                        '$dateToString': { 
+                            'format': '%Y-%m-%dT%H:%M:%SZ', 
+                            'date': '$timestamp' 
+                        } 
+                    },
+                    'other_user': {
+                        'user_id': {'$toString': '$other_user_info._id'},
+                        'name': '$other_user_info.name',
+                        'profile_image_url': '$other_user_info.profile_image_url'
+                    }
+                }
+            }
+        ]
+
+        recent_calls = list(mongo.cx['speak_db'].calls.aggregate(pipeline))
+        
+        return jsonify(recent_calls), 200
+
+    except Exception as e:
+        print(f"Error getting recent calls: {e}")
+        return jsonify({'message': 'An error occurred', 'error': str(e)}), 500
+    
