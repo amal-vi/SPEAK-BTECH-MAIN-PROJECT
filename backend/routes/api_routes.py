@@ -2,7 +2,6 @@ from flask import Blueprint, request, jsonify, current_app
 from extensions import mongo
 from utils.token_required import token_required
 from bson.objectid import ObjectId
-from bson.objectid import ObjectId
 import jwt
 import datetime
 import cloudinary.uploader 

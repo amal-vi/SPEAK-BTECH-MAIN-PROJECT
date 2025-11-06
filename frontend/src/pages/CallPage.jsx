@@ -41,6 +41,7 @@ export default function CallPage() {
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const otherUserRef = useRef(null);
+  const isCleaningUpRef = useRef(false);
 
   const createPeerConnection = (targetUserId) => {
     const pc = new RTCPeerConnection(peerConnectionConfig);
@@ -69,31 +70,91 @@ export default function CallPage() {
   };
 
   useEffect(() => {
+    let mounted = true;
+
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
+        if (!mounted) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
         setLocalStream(stream);
         localStreamRef.current = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
+        console.log('Media stream initialized');
       })
       .catch(err => {
         console.error("Error accessing media devices.", err);
       });
+
+    return () => {
+      mounted = false;
+      console.log('Component unmounting - cleaning up');
+      if (localStreamRef.current) {
+        console.log('Stopping tracks on unmount');
+        localStreamRef.current.getTracks().forEach(track => {
+          console.log(`Unmount: stopping ${track.kind}, state: ${track.readyState}`);
+          track.stop();
+        });
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
+    };
   }, []);
 
   const handleHangUp = useCallback((notifyPeer = true) => {
-    console.log('Hanging up call...');
+    if (isCleaningUpRef.current) {
+      console.log('Already cleaning up, skip');
+      return;
+    }
+    
+    isCleaningUpRef.current = true;
+    console.log('=== HANGUP INITIATED ===');
 
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      console.log('Local tracks stopped.');
+      const tracks = localStreamRef.current.getTracks();
+      console.log(`Found ${tracks.length} tracks to stop`);
+      tracks.forEach(track => {
+        console.log(`Stopping ${track.kind} track - current state: ${track.readyState}`);
+        track.stop();
+        console.log(`After stop() - state: ${track.readyState}`);
+      });
     }
 
-    peerConnectionRef.current?.close();
+    if (localVideoRef.current?.srcObject) {
+      console.log('Stopping tracks from video element');
+      const videoTracks = localVideoRef.current.srcObject.getTracks();
+      videoTracks.forEach(track => {
+        console.log(`Video element ${track.kind} - state: ${track.readyState}`);
+        track.stop();
+      });
+      localVideoRef.current.srcObject = null;
+      localVideoRef.current.load();
+    }
 
-    setLocalStream(null);
+    if (remoteVideoRef.current?.srcObject) {
+      remoteVideoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      remoteVideoRef.current.srcObject = null;
+      remoteVideoRef.current.load();
+    }
+
+    if (peerConnectionRef.current) {
+      console.log('Closing peer connection');
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
     localStreamRef.current = null;
+    setLocalStream(null);
     setRemoteStream(null);
     setCallStatus('idle');
 
@@ -102,7 +163,12 @@ export default function CallPage() {
     }
 
     dispatch(clearIncomingCall());
-    navigate('/dashboard');
+    
+    console.log('=== CLEANUP COMPLETE ===');
+    
+    setTimeout(() => {
+      navigate('/dashboard');
+    }, 200);
   }, [dispatch, navigate, socket]);
 
   useEffect(() => {
@@ -120,7 +186,11 @@ export default function CallPage() {
       }
     };
 
-    const onCallEnded = () => handleHangUp(false);
+    const onCallEnded = () => {
+      console.log('Call ended by peer');
+      handleHangUp(false);
+    };
+    
     const onCallRejected = () => {
       console.log("Call rejected by peer");
       alert("Call was rejected.");
@@ -200,7 +270,7 @@ export default function CallPage() {
         socket.emit('toggle-mic', { to: otherUserRef.current, isMicOn: newMicState });
       }
     }
-  }, []);
+  }, [socket]);
 
   const toggleVideo = useCallback(() => {
     if (!localStreamRef.current) return;
@@ -215,8 +285,7 @@ export default function CallPage() {
         socket.emit('toggle-video', { to: otherUserRef.current, isVideoOn: newVideoState });
       }
     }
-  }, []);
-
+  }, [socket]);
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
