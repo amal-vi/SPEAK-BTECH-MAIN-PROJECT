@@ -12,3 +12,4 @@ openai-whisper
 torch 
 torchvision
 torchaudio
+gTTS

@@ -9,7 +9,8 @@ import {
   IoMicSharp,
   IoVideocamOffSharp,
   IoVideocamSharp,
-  IoCall
+  IoCall,
+  IoSend
 } from "react-icons/io5";
 
 const peerConnectionConfig = {
@@ -39,6 +40,10 @@ export default function CallPage() {
   //captions
   const [captions, setCaptions] = useState("");
   const captionTimerRef = useRef(null);
+
+  //TTS
+  const [textMessage, setTextMessage] = useState("");
+  const audioPlayerRef = useRef(new Audio());
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -234,6 +239,26 @@ export default function CallPage() {
       }
     };
 
+    // TTS 
+    const onPlayAudioMessage = ({ audio, text }) => {
+      console.log(" Received TTS Audio:", text);
+      
+      // Hearing user -- Play the sound
+      if (!user?.isDeaf) {
+        try {
+          const audioSrc = `data:audio/mp3;base64,${audio}`;
+          audioPlayerRef.current.src = audioSrc;
+          
+          audioPlayerRef.current.play().catch((err) => {
+             console.error("Autoplay blocked:", err);
+          });
+          
+        } catch (error) {
+          console.error("Error playing audio:", error);
+        }
+      }
+    };
+
     socket.on('call-accepted', onCallAccepted);
     socket.on('ice-candidate', onIceCandidate);
     socket.on('call-ended', onCallEnded);
@@ -241,6 +266,7 @@ export default function CallPage() {
     socket.on('mic-toggled', onMicToggled);
     socket.on('video-toggled', onVideoToggled);
     socket.on('stt-result', onSttResult);
+    socket.on('play-audio-message', onPlayAudioMessage);
 
     return () => {
       socket.off('call-accepted', onCallAccepted);
@@ -250,6 +276,7 @@ export default function CallPage() {
       socket.off('mic-toggled', onMicToggled);
       socket.off('video-toggled', onVideoToggled);
       socket.off('stt-result', onSttResult);
+      socket.off('play-audio-message', onPlayAudioMessage);
     };
   }, [socket, handleHangUp, user]);
 
@@ -440,6 +467,17 @@ export default function CallPage() {
     }
   };
 
+  const handleSendText = (e) => {
+    e.preventDefault();
+    if (!textMessage.trim() || !otherUserRef.current) return;
+
+    socket.emit('send-text-for-tts', {
+      to: otherUserRef.current,
+      text: textMessage
+    });
+    setTextMessage("");
+  };
+
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
@@ -492,6 +530,32 @@ export default function CallPage() {
               Calling...
             </div>
           )}
+
+          {/* TTS INPUT BAR (ONLY FOR DEAF USER) */}
+          {user?.isDeaf && (
+             <div className="absolute bottom-24 left-0 w-full flex justify-center  px-4">
+               <form 
+                 onSubmit={handleSendText}
+                 className="flex w-full max-w-lg items-center gap-2 bg-gray-900/90 backdrop-blur-md p-2 rounded-full border border-gray-600 shadow-2xl"
+               >
+                 <input
+                   type="text"
+                   className="flex-grow bg-transparent text-white px-4 py-2 outline-none placeholder-gray-400 font-medium"
+                   placeholder="Type to speak..."
+                   value={textMessage}
+                   onChange={(e) => setTextMessage(e.target.value)}
+                   maxLength={500}
+                 />
+                 <button 
+                   type="submit"
+                   disabled={!textMessage.trim()}
+                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-400 text-white rounded-full p-3 transition-colors flex items-center justify-center"
+                 >
+                   <IoSend size={20} className={!textMessage.trim() ? "translate-x-0" : "translate-x-0.5"} />
+                 </button>
+               </form>
+             </div>
+           )}
 
           {user && user.isDeaf && captions && (
             <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-black bg-opacity-75 text-white p-4 rounded-md max-w-lg text-center z-20">

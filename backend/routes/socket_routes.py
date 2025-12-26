@@ -3,6 +3,7 @@ from flask_socketio import emit, join_room, leave_room
 from extensions import socketio, mongo  
 import datetime
 from bson.objectid import ObjectId
+from routes.tts import get_tts_audio
 
 online_users = {}
 
@@ -175,3 +176,29 @@ def register_socket_events():
         if target_user_id in online_users:
             target_socket_id = online_users[target_user_id]['socket_id']
             emit('stt-result', {'text': data.get('text')}, room=target_socket_id)
+
+
+    # TTS
+    @socketio.on('send-text-for-tts')
+    def handle_send_text_for_tts(data):
+ 
+        target_user_id = data.get('to')
+        text = data.get('text')
+
+        if target_user_id in online_users and text:
+            target_socket_id = online_users[target_user_id]['socket_id']
+            
+            print(f"🔤 Generating TTS for: '{text}' (Target: {target_user_id})")
+            
+           
+            audio_base64 = get_tts_audio(text)
+            
+            if audio_base64:
+                
+                emit('play-audio-message', {
+                    'audio': audio_base64,
+                    'text': text 
+                }, room=target_socket_id)
+                print(f"✅ TTS Audio sent to socket: {target_socket_id}")
+            else:
+                print("❌ Failed to generate TTS audio.")
