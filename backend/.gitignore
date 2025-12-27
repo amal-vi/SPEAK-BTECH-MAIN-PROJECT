@@ -32,3 +32,6 @@ htmlcov/
 
 # Misc
 *.sqlite3
+
+# Models
+ai/99_model.pt

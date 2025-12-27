@@ -4,6 +4,7 @@ from extensions import socketio, mongo
 import datetime
 from bson.objectid import ObjectId
 from routes.tts import get_tts_audio
+from routes.sign_detector import detector
 
 online_users = {}
 
@@ -202,3 +203,34 @@ def register_socket_events():
                 print(f"✅ TTS Audio sent to socket: {target_socket_id}")
             else:
                 print("❌ Failed to generate TTS audio.")
+
+    # sign language deteciton-process frame
+    @socketio.on('process-frame')
+    def handle_frame_processing(data):
+        # 1. Get image and target
+        image_data = data.get('image')
+        target_user_id = data.get('to')
+
+        if image_data:
+            # 2. Run Prediction (AI Model)
+            prediction = detector.predict(image_data)
+            
+            if prediction:
+                print(f"🖐 Sign Detected: {prediction}")
+                
+                # A. Notify the Signer (Deaf User) - Visual Confirmation
+                emit('sign-prediction', {'label': prediction}, room=request.sid)
+                
+                # B. Notify the Hearing User - AUDIO (TTS)
+                if target_user_id in online_users:
+                    target_socket = online_users[target_user_id]['socket_id']
+                    
+                    # Generate Audio for the predicted sign
+                    audio_base64 = get_tts_audio(prediction)
+                    
+                    if audio_base64:
+                        # Send the audio to be played automatically
+                        emit('play-audio-message', {
+                            'audio': audio_base64,
+                            'text': f"(Sign) {prediction}" 
+                        }, room=target_socket)

@@ -13,3 +13,7 @@ torch
 torchvision
 torchaudio
 gTTS
+opencv-python
+albumentations
+torchinfo
+rich

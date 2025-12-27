@@ -45,6 +45,9 @@ export default function CallPage() {
   const [textMessage, setTextMessage] = useState("");
   const audioPlayerRef = useRef(new Audio());
 
+  // sign language
+  const [signLabel, setSignLabel] = useState("");
+
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
@@ -329,6 +332,50 @@ export default function CallPage() {
     }
 
   }, [calleeId, localStream, socket, callStatus, incomingCallData, user, dispatch]);
+
+  //SIGN LANGUAGE DETECTION (SEND FRAMES)
+  useEffect(() => {
+    // Only run if the user is deaf user video is active
+    if (!user?.isDeaf || !localStreamRef.current) return;
+
+    const interval = setInterval(() => {
+      if (localVideoRef.current && socket.connected) {
+        // 1. Create a hidden canvas to grab the frame
+        const canvas = document.createElement('canvas');
+        canvas.width = 320; // Low res is fine for speed
+        canvas.height = 240;
+        
+        const ctx = canvas.getContext('2d');
+        // Draw the current video frame onto the canvas
+        ctx.drawImage(localVideoRef.current, 0, 0, canvas.width, canvas.height);
+        
+        // 2. Convert to Base64 (JPEG format, 50% quality to save bandwidth)
+        const frameData = canvas.toDataURL('image/jpeg', 0.5);
+
+        // 3. Send to Backend
+        socket.emit('process-frame', { 
+          image: frameData,
+          to: otherUserRef.current 
+        });
+      }
+    }, 500); // Send 2 frames per second
+
+    // 4. Listen for the result
+    const onSignPrediction = ({ label }) => {
+      console.log("🖐 Sign Detected:", label);
+      setSignLabel(label);
+      
+      // Clear the label after 2 seconds so it doesn't stay forever
+      setTimeout(() => setSignLabel(""), 2000);
+    };
+
+    socket.on('sign-prediction', onSignPrediction);
+
+    return () => {
+      clearInterval(interval);
+      socket.off('sign-prediction', onSignPrediction);
+    };
+  }, [user, socket, localStream]); 
 
   const toggleMic = useCallback(() => {
     if (!localStreamRef.current) return;
