@@ -44,6 +44,8 @@ export default function CallPage() {
   //TTS
   const [textMessage, setTextMessage] = useState("");
   const audioPlayerRef = useRef(new Audio());
+  const audioQueueRef = useRef([]);
+  const isPlayingRef = useRef(false);
 
   // sign language
   const [signLabel, setSignLabel] = useState("");
@@ -204,6 +206,46 @@ export default function CallPage() {
     }, 200);
   }, [dispatch, navigate, socket]);
 
+  const processAudioQueue = useCallback(() => {
+    if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
+
+    const nextItem = audioQueueRef.current.shift();
+    isPlayingRef.current = true;
+
+    try {
+      const audioSrc = `data:audio/wav;base64,${nextItem.audio}`;
+      audioPlayerRef.current.src = audioSrc;
+      audioPlayerRef.current.play().catch(err => {
+        console.error("Autoplay blocked:", err);
+        isPlayingRef.current = false;
+        processAudioQueue();
+      });
+    } catch (error) {
+      console.error("Error playing audio:", error);
+      isPlayingRef.current = false;
+      processAudioQueue();
+    }
+  }, []);
+
+  useEffect(() => {
+    const player = audioPlayerRef.current;
+    const handleEnded = () => {
+      isPlayingRef.current = false;
+      processAudioQueue();
+    };
+    const handleError = () => {
+      isPlayingRef.current = false;
+      processAudioQueue();
+    }
+
+    player.addEventListener('ended', handleEnded);
+    player.addEventListener('error', handleError);
+    return () => {
+      player.removeEventListener('ended', handleEnded);
+      player.removeEventListener('error', handleError);
+    };
+  }, [processAudioQueue]);
+
   useEffect(() => {
     const onCallAccepted = ({ answer }) => {
       console.log('Call accepted');
@@ -248,17 +290,8 @@ export default function CallPage() {
 
       // Hearing user -- Play the sound
       if (!user?.isDeaf) {
-        try {
-          const audioSrc = `data:audio/wav;base64,${audio}`;
-          audioPlayerRef.current.src = audioSrc;
-
-          audioPlayerRef.current.play().catch((err) => {
-            console.error("Autoplay blocked:", err);
-          });
-
-        } catch (error) {
-          console.error("Error playing audio:", error);
-        }
+        audioQueueRef.current.push({ audio, text });
+        processAudioQueue();
       }
     };
 
@@ -281,7 +314,7 @@ export default function CallPage() {
       socket.off('stt-result', onSttResult);
       socket.off('play-audio-message', onPlayAudioMessage);
     };
-  }, [socket, handleHangUp, user]);
+  }, [socket, handleHangUp, user, processAudioQueue]);
 
   useEffect(() => {
     if (!localStream || !socket.connected || !user) {
