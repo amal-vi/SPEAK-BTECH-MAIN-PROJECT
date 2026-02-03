@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { clearIncomingCall } from '../store/users-slice/usersSlice';
@@ -11,6 +11,30 @@ export default function IncomingCallModal({ callData }) {
   const socket = useSocket();
 
   const { from } = callData;
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    audioRef.current = new Audio('/ringtone.mp3');
+    audioRef.current.loop = true;
+
+    // Attempt to play audio
+    const playAudio = async () => {
+      try {
+        await audioRef.current.play();
+      } catch (err) {
+        console.error("Failed to play ringtone:", err);
+      }
+    };
+
+    playAudio();
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    };
+  }, []);
 
   const handleAnswer = () => {
     navigate('/call');
