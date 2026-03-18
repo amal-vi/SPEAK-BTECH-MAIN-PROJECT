@@ -369,7 +369,7 @@ export default function CallPage() {
   //SIGN LANGUAGE DETECTION (SEND FRAMES)
   useEffect(() => {
     // Only run if the user is deaf user video is active
-    if (!user?.isDeaf || !localStreamRef.current) return;
+    if (!user?.isDeaf || !localStreamRef.current || callStatus !== 'in-call') return;
 
     const interval = setInterval(() => {
       // Check if video is actually enabled before sending frames
@@ -409,7 +409,7 @@ export default function CallPage() {
       clearInterval(interval);
       socket.off('sign-prediction', onSignPrediction);
     };
-  }, [user, socket, localStream]);
+  }, [user, socket, localStream, callStatus, isVideoOn]);
 
   const toggleMic = useCallback(() => {
     if (!localStreamRef.current) return;
